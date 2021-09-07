@@ -1,0 +1,83 @@
+---
+layout: post
+title:  "step 0: init"
+date:   2021-09-07 22:00:00 +0200
+---
+
+## Mission Statement
+
+The goal of this series is to develop a working parser for [CSV](https://datatracker.ietf.org/doc/html/rfc4180) files. As an example use case, we have a file `data/users.csv` with the following content:
+
+```
+1,Torsten Test,1970-01-01
+2,Andrea Anders,2000-02-20
+```
+
+Each line should be parsed to an instance of this class:
+
+```scala
+case class User(id: Int, name: String, birthDate: LocalDate)
+```
+
+This is just an example - we want to support arbitrary primitive and complex Scala data types. In order to focus, however, there's various aspects of the CSV format we _won't_ target at all, among them quoting/escaping, multi-line columns, etc.
+
+## Conventions
+
+The code for each step can be found in the corresponding package prefixed `de.sangamon.nanocsv` - i.e. code for this post resides in `de.sangamon.nanocsv.step0`. Code shared among the steps (probably/hopefully only the `User` class) resides in `de.sangamon.nanocsv.shared`.
+
+## Initial Implementation
+
+We'll start with a very basic implementation that only uses Scala/Java standard library features. The code is short enough to present it here in its entirety.
+
+```scala
+type Row = List[String]
+
+object CSVParser:
+
+  val string: String => String = identity
+  val int: String => Int = _.toInt
+  val date: String => LocalDate = LocalDate.parse
+
+  private def lines(file: Path): List[String] =
+    Using.resource(Source.fromFile(file.toFile)) {
+      _.getLines().toList
+    }
+
+  private def row(line: String): Row = line.split(',').toList
+
+  def parse[T](file: Path)(conv: Row => T): List[T] =
+    lines(file).map(l => conv(row(l)))
+```
+
+`#lines()` reads lines from a file, `#row` splits a line into columns ( remember: no quoting/escaping for now), and `#parse()` combines these, then applies a caller-provided conversion function to each row in order to produce an instance of the desired type.
+
+For convenience, we provide some primitive conversion functions `#string()`, `#int()` and `#date()` to be perused by the caller when assembling their custom conversion function.
+
+Usage looks like this:
+
+```scala
+val parseUser: Row => User =
+  case List(i, n, b) => User(int(i), string(n), date(b))
+  case _ => 
+    throw new IllegalArgumentException("wrong number of columns for user")
+
+@main def main(csvFile: String): Unit =
+  for(u <- CSVParser.parse(Paths.get(csvFile))(parseUser))
+    println(u)
+```
+
+## Shortcomings
+
+While this kind of works, it suffers from a variety of problems:
+
+- We are offloading most of the heavy lifting to the caller: The conversion function is the essence of CSV parsing.
+- There is no structured failure handling. Exceptions will simply bubble up and crash the program. There is no way of looking at some piece of the code and reasoning about failure modes that may occur - these are fully opaque.
+- The exceptions won't be very informative. The caller won't know what failed where and why.
+
+What we'd rather like to have:
+
+- A declarative framework for specifying a row parser that lets the client assemble or derive their custom parsers from
+  pre-existing lower-level components (think Lego bricks). This mechanism should cover missing or (optionally) additional columns, as well.
+- Failure handling that
+    - provides the client with concise domain-level errors where appropriate.
+    - makes explicit which potential failure modes to expect at each step of the computation.
