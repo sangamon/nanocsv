@@ -22,8 +22,9 @@ title: nanocsv
 email: patrick@sangamon.de
 description: >- # this means to ignore newlines until "baseurl:"
   Growing a minimalist CSV reader with Scala 3 and Cats
-baseurl: "" # the subpath of your site, e.g. /blog
-url: "" # the base hostname & protocol for your site, e.g. http://example.com
+baseurl: "/nanocsv" # the subpath of your site, e.g. /blog
+url: "https://sangamon.github.io" # the base hostname & protocol for your site, e.g. http://example.com
+domain: "sangamon.github.io"
 github_username: sangamon
 
 # Build settings

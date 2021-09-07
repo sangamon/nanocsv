@@ -1,6 +1,6 @@
 ---
 layout: post
-title:  "step 0: init"
+title:  "step 00: init"
 date:   2021-09-07 22:00:00 +0200
 ---
 
@@ -23,7 +23,7 @@ This is just an example - we want to support arbitrary primitive and complex Sca
 
 ## Conventions
 
-The code for each step can be found in the corresponding package prefixed `de.sangamon.nanocsv` - i.e. code for this post resides in `de.sangamon.nanocsv.step0`. Code shared among the steps (probably/hopefully only the `User` class) resides in `de.sangamon.nanocsv.shared`.
+The code for each step can be found in the corresponding package prefixed `de.sangamon.nanocsv` - i.e. code for this post resides in `de.sangamon.nanocsv.step00`. Code shared among the steps (probably/hopefully only the `User` class) resides in `de.sangamon.nanocsv.shared`.
 
 ## Initial Implementation
 
