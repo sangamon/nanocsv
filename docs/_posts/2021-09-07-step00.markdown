@@ -23,7 +23,9 @@ This is just an example - we want to support arbitrary primitive and complex Sca
 
 ## Conventions
 
-The code for each step can be found in the corresponding package prefixed `de.sangamon.nanocsv` - i.e. code for this post resides in `de.sangamon.nanocsv.step00`. Code shared among the steps (probably/hopefully only the `User` class) resides in `de.sangamon.nanocsv.shared`.
+The full source code for these posts resides at [https://github.com/sangamon/nanocsv](https://github.com/sangamon/nanocsv).
+
+The code for each step can be found in the corresponding package prefixed `de.sangamon.nanocsv` - i.e. code for this post resides in [`de.sangamon.nanocsv.step00`](https://github.com/sangamon/nanocsv/tree/main/src/main/scala/de/sangamon/nanocsv/step00). Code shared among the steps (probably/hopefully only the `User` class) resides in [`de.sangamon.nanocsv.shared`](https://github.com/sangamon/nanocsv/tree/main/src/main/scala/de/sangamon/nanocsv/shared).
 
 ## Initial Implementation
 
@@ -68,7 +70,16 @@ val parseUser: Row => User =
 
 ## Shortcomings
 
-While this kind of works, it suffers from a variety of problems:
+While this kind of works...
+
+```
+sbt:nanocsv> run data/users.csv
+[info] running de.sangamon.nanocsv.step00.main data/users.csv
+User(1,Torsten Test,1970-01-01)
+User(2,Andrea Anders,2000-02-20)
+```
+
+...it suffers from a variety of problems:
 
 - We are offloading most of the heavy lifting to the caller: The conversion function is the essence of CSV parsing.
 - There is no structured failure handling. Exceptions will simply bubble up and crash the program. There is no way of looking at some piece of the code and reasoning about failure modes that may occur - these are fully opaque.
@@ -81,3 +92,5 @@ What we'd rather like to have:
 - Failure handling that
     - provides the client with concise domain-level errors where appropriate.
     - makes explicit which potential failure modes to expect at each step of the computation.
+
+Let's fix this.
