@@ -14,7 +14,7 @@ trait RowParser[T]:
 
 object RowParser:
 
-  def const[T](v: T): RowParser[T] = row => (v, row)
+  def const[T](v: T): RowParser[T] = (v, _)
 
   def transform[A, B](p: RowParser[A])(f: A => B): RowParser[B] =
     row =>
@@ -36,7 +36,7 @@ object RowParser:
   
   val int: RowParser[Int] = transform(string)(_.toInt)
   val date: RowParser[LocalDate] = transform(string)(LocalDate.parse)
-
+  
 object CSVParser:
 
   private def lines(file: Path): List[String] =

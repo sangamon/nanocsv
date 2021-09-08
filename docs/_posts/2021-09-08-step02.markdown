@@ -1,0 +1,69 @@
+---
+layout: post
+title:  "step 02: Cats"
+date:   2021-09-08 15:00:00 +0200
+---
+
+## Abstractions
+
+It turns out that most of the considerations from the [previous step]({{ site.baseurl }}{% post_url 2021-09-08-step01 %}) are not specific to our row parser domain - they occur in various contexts, and they can be implemented as reusable abstractions.
+
+We have reinvented three such abstractions:
+
+- The idea of sinking a pure function into a black box to transform it internally is known as "[Functor](https://en.wikipedia.org/wiki/Functor_(functional_programming))" - our `#transform()` is usually called `map`.
+- Combining black box that can conjure up a function with another black box of the same type that knows how to produce a value for the input type of the function is called "[Applicative](https://en.wikipedia.org/wiki/Applicative_functor)". `#combine()` is commonly known as `ap` (or alternetively as the operator `<*>` that we already use), `#const()` is usually called `pure` (or sometimes, confusingly, `return`).
+- Having a function produce a pair of some output along with another item that can be fed as input into the same (or a similar) function again is known as "State".
+
+## Cats
+
+The [Cats](https://typelevel.org/cats/) library provides implementations for all these abstractions:
+
+- [Functor](https://typelevel.org/cats/typeclasses/functor.html)
+- [Applicative](https://typelevel.org/cats/typeclasses/applicative.html)
+- [State](https://typelevel.org/cats/datatypes/state.html)
+
+Functor and Applicative are implemented as [type classes](https://docs.scala-lang.org/scala3/book/types-type-classes.html). State is a concrete data type that in turn is integrated with type classes such as Functor and Applicative.
+
+We'll look into State in a later post. For now, we'll convert our `#const()` and `#combine()` to a Cats Applicative. We'll find that this gives us a richer API than our RYO version (and a Functor for free).
+
+## Applicative and Functor
+
+Transforming our custom `#const()` and `#combine()` to `Applicative` is straightforward:
+
+```scala
+given Applicative[RowParser] with
+  def pure[A](x: A): RowParser[A] = (x, _)
+  def ap[A, B](ff: RowParser[A => B])(fa: RowParser[A]): RowParser[B] =
+    row => {
+      val (f, fr) = ff.parse(row)
+      val (a, ar) = fa.parse(fr)
+      f(a) -> ar
+    }
+```
+
+We could convert `#transform()` to `Functor` as well, but we don't have to. Given an Applicative, we can always build a Functor: Just wrap the function with `pure` and then use it with `ap` in order to get `map`. Cats provides this as a default implementation, so we can use it directly.
+
+```scala
+val int: RowParser[Int] = string.map(_.toInt)
+val date: RowParser[LocalDate] = string.map(LocalDate.parse)
+```
+
+## Applicative Syntax
+
+We can assemble our user parser with syntax similar to what we came up with before.
+
+```scala
+val userParser: RowParser[User] =
+  (User.apply.curried).pure[RowParser] <*> int <*> string <*> date
+```
+
+Cats provides an alternative variant.
+
+```scala
+val userParser: RowParser[User] =
+  (int, string, date).mapN(User.apply)
+```
+
+There are more convenience functions built on `Applicative`, for example the operators `*>` and `<*` that ignore the result of the left or right hand side. (We'll probably see example applications of this in a later post.) There are also ties between `Applicative` and other abstractions that provide an even richer API.
+
+The full code for this post can be found in package [`de.sangamon.nanocsv.step02`](https://github.com/sangamon/nanocsv/tree/main/src/main/scala/de/sangamon/nanocsv/step02). Now that we've become proper citizens of Cats, let's take one further step to ease parser assembly for our users.

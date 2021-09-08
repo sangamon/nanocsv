@@ -86,7 +86,7 @@ val date: RowParser[LocalDate] = transform(string)(LocalDate.parse)
 Let's take a step back and revisit our API. A `RowParser` consumes an arbitrary number of columns: primitive parsers consume one, the `User` parser consumes three - and there's nothing that keeps a parser from consuming _zero_ columns. We can have "constant" parsers:
 
 ```scala
-def const[T](v: T): RowParser[T] = row => (v, row)
+def const[T](v: T): RowParser[T] = (v, _)
 ```
 
 So we can combine parsers that actually consume columns with parsers that are simply containers for values. In particular, we can even have parsers of functions: `RowParser[A => B]`.
@@ -130,4 +130,4 @@ val userParser: RowParser[User] =
 
 Now this is starting to look like a decent combinator API.
 
-The full code for this post can be found in package [`de.sangamon.nanocsv.step01`](https://github.com/sangamon/nanocsv/tree/main/src/main/scala/de/sangamon/nanocsv/step01). Next, let's see if there's prior art for this idea that we can integrate with.
+The full code for this post can be found in package [`de.sangamon.nanocsv.step01`](https://github.com/sangamon/nanocsv/tree/main/src/main/scala/de/sangamon/nanocsv/step01). [Next]({{ site.baseurl }}{% post_url 2021-09-08-step02 %}), let's see if there's prior art for this idea that we can integrate with.

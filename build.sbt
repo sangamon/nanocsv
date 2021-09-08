@@ -5,5 +5,6 @@ ThisBuild / organization     := "de.sangamon"
 
 lazy val root = (project in file("."))
   .settings(
-    name := "nanocsv"
+    name := "nanocsv",
+    libraryDependencies += "org.typelevel" %% "cats-core" % "2.6.1"
   )
