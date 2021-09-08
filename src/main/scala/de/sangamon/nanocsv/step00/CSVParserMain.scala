@@ -4,7 +4,7 @@ import de.sangamon.nanocsv.shared.User
 
 import java.nio.file.*
 
-object CSVParseMain:
+object CSVParserMain:
 
   import CSVParser.*
 

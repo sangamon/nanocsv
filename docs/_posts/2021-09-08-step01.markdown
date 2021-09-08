@@ -1,0 +1,133 @@
+---
+layout: post
+title:  "step 01: Row Parser"
+date:   2021-09-08 00:30:00 +0200
+---
+
+## Consuming Columns
+
+In the [initial implementation]({{ site.baseurl }}{% post_url 2021-09-07-step00 %}), we provide some primitive "column parsers" of type `String => T` as building blocks for a caller-provided "conversion function" `Row => T`. To combine these into a "Lego brick" framework, we obviously can't use either type: Column parsers consume a single column only, a conversion function consumes a whole row (or as much of it as it needs).
+
+To reconcile these, we can think of a parser as consuming an arbitrary number of columns from a row - and returning the remainder along with the result.
+
+```scala
+trait RowParser[T]:
+  def parse(row: Row): (T, Row)
+```
+
+We can redefine our primitive column parsers in terms of `RowParser` and expect a `RowParser` from the caller:
+
+```scala
+private def column[T](f: String => T): RowParser[T] =
+  case h :: t => f(h) -> t
+  case Nil => throw new CSVException("input exhausted")
+
+val string: RowParser[String] = column(identity)
+val int: RowParser[Int] = column(_.toInt)
+val date: RowParser[LocalDate] = column(LocalDate.parse)
+```
+
+```scala
+def parse[T](file: Path)(p: RowParser[T]): List[T] =
+  lines(file).map(l => p.parse(row(l))(0))
+```
+
+...but this doesn't look like we're making anybody's life much more comfortable, yet:
+
+```scala
+  val userParser: RowParser[User] =
+    row =>
+      val (i, ir) = int.parse(row)
+      val (n, nr) = string.parse(ir)
+      val (d, dr) = date.parse(nr)
+      (User(i, n, d), dr)
+```
+
+> Note: We're playing fast and loose with error semantics here. The previous version only allowed rows with exactly three columns, this one will tolerate trailing data and fail with a different exception on missing columns. Let's worry about this later.
+
+## Combining Parsers
+
+How to generically combine, say, an `int`, `string`, `date` parser to a `User` one?
+
+Using a `List[RowParser[T]]` or similar as a building block won't work - what's `T` going to be? The target types of the individual parsers will be lost. We need to handle a heterogeneous list of types. And we kind of have a representation for it - it's the `User#apply()` function of type `(Int, String, LocalDate) => User`, which we can [curry](https://en.wikipedia.org/wiki/Currying) to `Int => String => LocalDate => User`. Can we somehow use this?
+
+## Transforming Parsers
+
+Given a function `A => B` and a parser `RowParser[A]`, we can't create a `B` - but we can easily create a `RowParser[B]`:
+
+```scala
+def transform[A, B](p: RowParser[A])(f: A => B): RowParser[B] =
+  row =>
+    val (a, ar) = p.parse(row)
+    (f(a), ar)
+```
+
+That's nice in its own right, i.e. we can modify existing parsers:
+
+```scala
+transform(string)(_.toLowerCase)
+```
+
+...and we can unify the definition of our primitives:
+
+```scala
+val string: RowParser[String] =
+  case h :: t => h -> t
+  case Nil => throw new CSVException("input exhausted")
+
+val int: RowParser[Int] = transform(string)(_.toInt)
+val date: RowParser[LocalDate] = transform(string)(LocalDate.parse)
+```
+
+...but it doesn't help us with traversing a constructor function: We need to consume columns in lockstep with parameter types.
+
+## Non-parsing Parsers
+
+Let's take a step back and revisit our API. A `RowParser` consumes an arbitrary number of columns: primitive parsers consume one, the `User` parser consumes three - and there's nothing that keeps a parser from consuming _zero_ columns. We can have "constant" parsers:
+
+```scala
+def const[T](v: T): RowParser[T] = row => (v, row)
+```
+
+So we can combine parsers that actually consume columns with parsers that are simply containers for values. In particular, we can even have parsers of functions: `RowParser[A => B]`.
+
+## Folding Functions
+
+Why is this interesting? Well, it means we can thread functions through computations "inside" parsers that actually do some work...
+
+```scala
+def combine[A, B](fp: RowParser[A => B], p: RowParser[A]): RowParser[B] =
+  row =>
+    val (f, fr) = fp.parse(row)
+    val (v, vr) = p.parse(fr)
+    f(v) -> vr
+```
+
+With each `#combine()` step, we are stripping the leading parameter off our function and inject a parser operation for the corresponding argument instead. Now we can build a parser from parsers guided by a function...
+
+```scala
+  val userParser: RowParser[User] =
+    combine(combine(combine(const((User.apply _).curried), int), string), date)
+```
+
+...and it looks terse, but somewhat illegible.
+
+## Syntactic Sugar
+
+An operator alias for `#combine()`...
+
+```scala
+extension[A, B](fp: RowParser[A => B])
+  def <*>(p: RowParser[A]): RowParser[B] = combine(fp, p)
+```
+
+...will yield considerable improvement:
+
+```scala
+val userParser: RowParser[User] =
+  const(User.apply.curried) <*> int <*> string <*> date
+```
+
+Now this is starting to look like a decent combinator API.
+
+The full code for this post can be found in package [`de.sangamon.nanocsv.step01`](https://github.com/sangamon/nanocsv/tree/main/src/main/scala/de/sangamon/nanocsv/step01). Next, let's see if there's prior art for this idea that we can integrate with.

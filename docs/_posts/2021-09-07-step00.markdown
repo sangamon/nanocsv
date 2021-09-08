@@ -21,7 +21,7 @@ case class User(id: Int, name: String, birthDate: LocalDate)
 
 This is just an example - we want to support arbitrary primitive and complex Scala data types. In order to focus, however, there's various aspects of the CSV format we _won't_ target at all, among them quoting/escaping, multi-line columns, etc.
 
-## Conventions
+## Code
 
 The full source code for these posts resides at [https://github.com/sangamon/nanocsv](https://github.com/sangamon/nanocsv).
 
@@ -93,4 +93,4 @@ What we'd rather like to have:
     - provides the client with concise domain-level errors where appropriate.
     - makes explicit which potential failure modes to expect at each step of the computation.
 
-Let's fix this.
+Let's start fixing this. In the [first step]({{ site.baseurl }}{% post_url 2021-09-08-step01 %}), we'll try to improve the API for specifying row parsers.
