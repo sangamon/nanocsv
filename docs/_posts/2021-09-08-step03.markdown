@@ -1,0 +1,102 @@
+---
+layout: post
+title:  "step 03: Deriving Parsers"
+date:   2021-09-08 17:00:00 +0200
+---
+
+## Derivation
+
+In the [last step]({{ site.baseurl }}{% post_url 2021-09-08-step02 %}), we embedded our nice,
+applicative row parser combinator API into the Cats ecosystem. Are we done now?
+
+Well, one thing still looks like it could be improved... We said that our applicative chain
+traverses the parameters of the given parameter function. Assuming that we have an
+unambiguous mapping from parameter types to primitive/column parsers (which we may not
+always have) - why should we still have to specify the parsers at all? Can't we just
+infer them from the constructor function and be done with it?
+
+We might feel tempted to look into black Scala magic like macros to solve this, but let's
+see if we can implement this using our standard tools...
+
+## Mapping
+
+Creating a mapping from types to parsers is easy - we just need to provide 
+[`given` instances](https://docs.scala-lang.org/scala3/reference/contextual/givens.html)
+of `RowParser[T]` for each type `T` we want to assign a default mapping for.
+
+```scala
+given RowParser[String] = string
+given RowParser[Int] = int
+given RowParser[LocalDate] = date
+```
+
+Armed with these, we can rewrite our user parser.
+
+```scala
+(
+  summon[RowParser[Int]],
+  summon[RowParser[String]],
+  summon[RowParser[LocalDate]]
+).mapN(User.apply)
+```
+
+But again, this doesn't really look like an improvement so far. How can we
+use these mappings and the constructor functions to derive a combined parser?
+
+## Chaining Type Classes
+
+With the applicative approach, we basically are "folding left" over the constructor
+parameters. For derivation, it feels like we need to "fold right" instead: We start
+looking for a parser derivation for the output type and need to assemble its parts
+by traversing the parameters to the left.
+
+Time to introduce our own type class.
+
+```scala
+trait RowParserDerivable[A, B]:
+  def deriveRowParser(a: A): RowParser[B]
+```
+
+`B` obviously is the target type, but what's `A`? It's the source of our derivation,
+i.e. it'll be some function.
+
+## Base...
+
+The derivation base case is easy: Given `A => B` and a row parser
+for `A`, we can derive a parser for `B` simply by mapping:
+
+```scala
+given[A, B](using RowParser[A]): RowParserDerivable[A => B, B] with
+  def deriveRowParser(f: A => B): RowParser[B] = summon[RowParser[A]].map(f)
+```
+
+## ...and Step
+
+Now the inductive step. If we already can derive a parser for some `C` from a
+function `B`, then, given the (curried) function `A => B` and a row parser for
+`A`, we can build a derived parser for `C` by first parsing `A`, passing the
+result into `A => B`, deriving a parser for `C` from the remaining `B` and
+applying it to the remainder of the row. The actual code probably is easier
+to read than this winded description.
+
+```scala
+given[A, B, C](
+    using RowParser[A], RowParserDerivable[B, C]
+): RowParserDerivable[A => B, C] with
+  def deriveRowParser(f: A => B): RowParser[C] =
+    row =>
+      val (a, remA) = summon[RowParser[A]].parse(row)
+      summon[RowParserDerivable[B, C]].deriveRowParser(f(a)).parse(remA)
+```
+
+## Profit
+
+And that's it already.
+
+```scala
+val userParser: RowParser[User] = User.apply.curried.deriveRowParser
+```
+
+The full code for this post can be found in package [`de.sangamon.nanocsv.step03`](https://github.com/sangamon/nanocsv/tree/main/src/main/scala/de/sangamon/nanocsv/step03). This completes our quest
+for a decent row parser combinator API for now. In the next step, we will turn from these lofty heights
+to the clerical chores of error handling.

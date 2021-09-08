@@ -66,4 +66,4 @@ val userParser: RowParser[User] =
 
 There are more convenience functions built on `Applicative`, for example the operators `*>` and `<*` that ignore the result of the left or right hand side. (We'll probably see example applications of this in a later post.) There are also ties between `Applicative` and other abstractions that provide an even richer API.
 
-The full code for this post can be found in package [`de.sangamon.nanocsv.step02`](https://github.com/sangamon/nanocsv/tree/main/src/main/scala/de/sangamon/nanocsv/step02). Now that we've become proper citizens of Cats, let's take one further step to ease parser assembly for our users.
+The full code for this post can be found in package [`de.sangamon.nanocsv.step02`](https://github.com/sangamon/nanocsv/tree/main/src/main/scala/de/sangamon/nanocsv/step02). Now that we've become proper citizens of Cats, let's take [one further step]({{ site.baseurl }}{% post_url 2021-09-08-step03 %}) to ease parser assembly for our users.
