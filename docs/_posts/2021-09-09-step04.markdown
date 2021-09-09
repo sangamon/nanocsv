@@ -56,7 +56,7 @@ Let's start by defining our user error types. So far we have encountered two err
 in the core parser: Row exhaustion, and failure to parse a column to the expected type.
 
 ```scala
-enum CSVFailure:
+enum CSVParseFailure:
   case ColumnParseFailure(cause: Throwable)
   case RowExhaustionFailure
 ```
@@ -65,7 +65,7 @@ We'll provide a type alias for the `Either` instantiation for this error and mak
 type of our parse operation.
 
 ```scala
-type CSVResult[T] = Either[CSVFailure, T]
+type CSVResult[T] = Either[CSVParseFailure, T]
 
 trait RowParser[T]:
   def parse(row: Row): CSVResult[(T, Row)]
@@ -144,6 +144,30 @@ CSVParser.parse(Paths.get(csvFile))(userParser) match
   case Right(r) => r.foreach(println)
 ```
 
+Success,...
+
+```
+sbt:nanocsv> runMain de.sangamon.nanocsv.step04.main data/users.csv
+[info] running de.sangamon.nanocsv.step04.main data/users.csv
+User(1,Torsten Test,1970-01-01)
+User(2,Andrea Anders,2000-02-20)
+```
+
+..., user error,...
+
+```
+sbt:nanocsv> runMain de.sangamon.nanocsv.step04.main data/users.csv
+ERROR: ColumnParseFailure(java.time.format.DateTimeParseException: Text '2000-02-20x' could not be parsed, unparsed text found at index 10)
+```
+
+...and I/O failure.
+
+```
+sbt:nanocsv> runMain de.sangamon.nanocsv.step04.main data/xyz.csv
+[info] running de.sangamon.nanocsv.step04.main data/xyz.csv
+[error] (run-main-d) java.io.FileNotFoundException: data/xyz.csv (No such file or directory)
+```
+
 Whew. This was quite a ride, and the benefit/cost ratio of this approach to failure handling may seem
 somewhat questionable. In its defense...
 
@@ -156,4 +180,4 @@ somewhat questionable. In its defense...
 
 I hope the benefit will become even clearer in subsequent posts. The full code for this post can be found in package
 [`de.sangamon.nanocsv.step04`](https://github.com/sangamon/nanocsv/tree/main/src/main/scala/de/sangamon/nanocsv/step04).
-In the next step, we will extend failure handling to the file level.
+In the [next step]({{ site.baseurl }}{% post_url 2021-09-09-step05 %}), we will extend failure handling to the file level.

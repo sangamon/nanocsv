@@ -1,8 +1,9 @@
-package de.sangamon.nanocsv.step04
+package de.sangamon.nanocsv.step05
 
 import cats.*
 import cats.syntax.all.*
 
+import java.io.FileNotFoundException
 import java.nio.file.*
 import java.time.*
 import scala.io.*
@@ -45,6 +46,11 @@ object RowParser:
   val int: RowParser[Int] = string.guardMap(_.toInt)
   val date: RowParser[LocalDate] = string.guardMap(LocalDate.parse)
 
+  val end: RowParser[Unit] = {
+    case Nil => ((), Nil).asRight
+    case _ => ColumnParseFailure(new IllegalStateException("trailing data")).asLeft
+  }
+
   given RowParser[String] = string
   given RowParser[Int] = int
   given RowParser[LocalDate] = date
@@ -68,16 +74,27 @@ object RowParserDerivable:
   extension[A](a: A)
     def deriveRowParser[B](using derive: RowParserDerivable[A, B]): RowParser[B] = derive.deriveRowParser(a)
 
+case class CSVIOFailure(file: Path, cause: Throwable)
+
+type CSVFailure = CSVIOFailure | CSVParseFailure
+
 object CSVParser:
 
   import CSVParseFailure.*
 
-  private def lines(file: Path): List[String] =
-    Using.resource(Source.fromFile(file.toFile)) { _.getLines().toList }
+  private def lines(file: Path): Either[CSVIOFailure, List[String]] =
+    Either
+      .catchOnly[FileNotFoundException] {
+        Using.resource(Source.fromFile(file.toFile)) { _.getLines().toList }
+      }
+      .leftMap(CSVIOFailure(file, _))
 
   private def row(line: String): Row = line.split(',').toList
 
   private def parseRow[T](p: RowParser[T])(row: Row): CSVResult[T] = p.parse(row).map(_(0))
 
-  def parse[T](file: Path)(p: RowParser[T]): CSVResult[List[T]] =
-    lines(file).map(row).traverse(parseRow(p))
+  def parseLines[T](p: RowParser[T])(lines: List[String]): CSVResult[List[T]] =
+    lines.map(row).traverse(parseRow(p))
+
+  def parse[T](file: Path)(p: RowParser[T]): Either[CSVFailure, List[T]] =
+    lines(file).leftWiden[CSVFailure] >>= parseLines(p)

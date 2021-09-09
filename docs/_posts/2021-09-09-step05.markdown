@@ -1,0 +1,77 @@
+---
+layout: post
+title:  "step 05: I/O Failure"
+date:   2021-09-09 02:00:00 +0200
+---
+
+## File Failure
+
+In the [previous step]({{ site.baseurl }}{% post_url 2021-09-09-step04 %}), we introduced dedicated handling for
+user errors inside the core CSV parser. Now we'll look into possible failures during file reading. Some of these
+certainly are "just happen" internal errors - disk hardware failure, etc. But some will in most instances be
+attributable to user error in that the user either accidentally provided erroneous input or that he could at least
+be in a position to fix the underlying issue: file not found or not accessible, etc.
+
+Let's introduce a user level error for these cases and produce it on `FileNotFoundException`. 
+
+```scala
+case class CSVIOFailure(file: Path, cause: Throwable)
+
+private def lines(file: Path): Either[CSVIOFailure, List[String]] =
+  Either
+    .catchOnly[FileNotFoundException] {
+      Using.resource(Source.fromFile(file.toFile)) { _.getLines().toList }
+    }
+    .leftMap(CSVIOFailure(file, _))
+```
+
+## Combine Errors
+
+Now we potentially have `CSVIOFailure` coming from one part of the Computation and `CSVParseFailure` from the other.
+How to reconcile them? Here we'll just take the easy way out and combine them as a
+[union type](https://docs.scala-lang.org/scala3/reference/new-types/union-types.html) -
+we won't do anything with them but printing them, anyway. 
+
+```scala
+type CSVFailure = CSVIOFailure | CSVParseFailure
+
+def parse[T](file: Path)(p: RowParser[T]): Either[CSVFailure, List[T]] =
+  lines(file).leftWiden[CSVFailure] >>= parseLines(p)
+```
+
+...and that's it.
+
+```
+sbt:nanocsv> runMain de.sangamon.nanocsv.step05.main data/xyz.csv
+ERROR: CSVIOFailure(data/xyz.csv,java.io.FileNotFoundException: data/xyz.csv (No such file or directory))
+```
+
+## Encore: End
+
+This was a pretty short post. Let's use the remaining space to tie up a loose end. The initial user parser would
+fail if there were trailing columns - our row parser doesn't care. We can simply let the user control this
+behavior - via a row parser. This parser would not _consume_ any columns, just _inspect_ the row and issue
+failure if it finds it empty.
+
+```scala
+  val end: RowParser[Unit] = {
+    case Nil => ((), Nil).asRight
+    case _ => ColumnParseFailure(new IllegalStateException("trailing data")).asLeft
+  }
+```
+
+Now we can make our user parser strict.
+
+```
+val userParser: RowParser[User] =
+  User.apply.curried.deriveRowParser[User] <* end
+```
+
+Possible outcome:
+
+```
+sbt:nanocsv> runMain de.sangamon.nanocsv.step05.main data/users.csv
+ERROR: ColumnParseFailure(java.lang.IllegalStateException: trailing data)
+```
+
+In the next post, we'll discuss making our user errors more informative.

@@ -73,8 +73,7 @@ val parseUser: Row => User =
 While this kind of works...
 
 ```
-sbt:nanocsv> run data/users.csv
-[info] running de.sangamon.nanocsv.step00.main data/users.csv
+sbt:nanocsv> runMain de.sangamon.nanocsv.step00.main data/users.csv
 User(1,Torsten Test,1970-01-01)
 User(2,Andrea Anders,2000-02-20)
 ```
