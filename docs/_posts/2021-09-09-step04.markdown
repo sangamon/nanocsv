@@ -1,0 +1,159 @@
+---
+layout: post
+title:  "step 04: Error"
+date:   2021-09-09 00:00:00 +0200
+---
+
+## Failure Modes
+
+In the [last step]({{ site.baseurl }}{% post_url 2021-09-08-step03 %}), we concluded our
+parser API design for the time being. Let's turn to error handling.
+
+One common approach to handling failure is to distinguish between two types of errors:
+those that are a direct consequence of user input, and those that just happen - "internal" errors.
+There's a strong correlation between this distinction the notion of pure and side-effecting
+functions. User errors usually arise from pure computations (they only depend on the input),
+internal errors result from side effects (I/O failures, etc.).
+
+User errors can either be handled at some point, or they should be brought to the attention of
+the user. It is useful to be pretty clear about which computations can yield which kind of user
+errors. Internal errors, on the other hand, are of no interest to the user and will mostly just
+end up being logged/reported for future investigation. We don't really care what kind of internal
+error may arise from a computation, only whether it can happen at all.
+
+## Representation
+
+To encode this distinction, a common pattern is to have a specific set of user error
+types, typically an ADT, for each module. The result of a potentially failing application
+will be _either_ a successful result of the appropriate type _or_ a user error, often
+represented by the [`Either`](https://www.scala-lang.org/api/current/scala/util/Either.html)
+data type. Internal errors may be propagated as exceptions - not necessarily by throwing
+them and letting them bubble up the stack, but by embedding them into a representation
+of a side-effecting computation, such as Scala's built-in 
+[`Future`](https://www.scala-lang.org/api/current/scala/concurrent/Future.html) or cats-effect's 
+[`IO`](https://typelevel.org/cats-effect/api/3.x/cats/effect/IO.html).
+
+Let's assume that a successful result is of type `T`, the user error type is `E` and the
+side-effecting computation context is `F`. This gives rise to the following cases for
+function result types:
+
+- `T` - A pure computation that cannot raise user errors.
+- `Either[E, T]` - A pure computation that may raise user errors.
+- `F[T]` - A side-effecting computation that may suffer from internal errors.
+- `F[Either[E, T]]` - A side-effecting computation with potential internal _and_ user errors.
+
+Obviously we'll need some API for `Either` and `F` to handle threading results through these
+representations - and we'll find that this will often be based on generic abstractions just
+like `Functor` and `Applicative`...
+
+So much for theory, let's put it to practice. We will focus on equipping our core CSV parser
+with explicit user errors - i.e. for now we'll continue to let internal errors bubble up as
+exceptions, and we'll ignore the file reading part altogether.
+
+## Either
+
+Let's start by defining our user error types. So far we have encountered two error modes
+in the core parser: Row exhaustion, and failure to parse a column to the expected type.
+
+```scala
+enum CSVFailure:
+  case ColumnParseFailure(cause: Throwable)
+  case RowExhaustionFailure
+```
+
+We'll provide a type alias for the `Either` instantiation for this error and make it the return
+type of our parse operation.
+
+```scala
+type CSVResult[T] = Either[CSVFailure, T]
+
+trait RowParser[T]:
+  def parse(row: Row): CSVResult[(T, Row)]
+```
+
+We can easily convert `#string`. Note that `Either` has an `Applicative` instance that threads computations
+through its "success" (i.e. right-hand) side, so we can use `#pure`.
+
+```scala
+val string: RowParser[String] =
+  case h :: t => (h, t).pure
+  case Nil => RowExhaustionFailure.asLeft[(String, Row)]
+```
+
+## Monad
+
+What about `#int` and `#date`, though? We cannot keep using `#map()` over `#string`.
+We already get a `CSVResult` from the string parser, and we want to produce another `CSVResult` _that
+depends on the success value of the former_ upon conversion.
+
+Fortunately there's another abstraction
+built on top of `Applicative` that supports exactly this kind of dependent computation chaining.
+[`Monad`](https://typelevel.org/cats/typeclasses/monad.html) adds another function `#flatMap()` (and
+its operator alias `>>=`) to our tool case. It is somewhat supported by the Scala core language and
+library already - many types, including `Either`, have a `#flatMap()` method, and there's 
+[`for` expressions](https://docs.scala-lang.org/scala3/book/taste-control-structures.html#for-loops-and-expressions)
+that provide syntactic sugar for nested `#flatMap()`/`#map()` expressions. 
+
+To make it easier to digest, let's split the task of providing a `Monad` based replacement for our previous
+`#map()` usage in two: First define a function `#emap()` that converts a `RowParser` given a function
+`A => CSVResult[B]`, implemented using `#flatMap()`. Then define a function `#guardMap()` that takes an
+(impure!) function `A => B`, converts it to `A => CSVResult[B]` by catching potential exceptions, and feeds
+this to `#emap()`.
+
+```scala
+extension[A](p: RowParser[A])
+  def emap[B](f: A => CSVResult[B]): RowParser[B] =
+    p.parse(_) >>= { case (res, rem) => f(res).map(_ -> rem) }
+  def guardMap[B](f: A => B): RowParser[B] =
+    emap { a => Either.catchNonFatal(f(a)).leftMap(ColumnParseFailure(_)) }
+```
+
+This gives us our new implementations for `#int` and `#date`.
+
+```scala
+val int: RowParser[Int] = string.guardMap(_.toInt)
+val date: RowParser[LocalDate] = string.guardMap(LocalDate.parse)
+```
+
+We'll also need to convert our `Applicative` instance and the inductive row parser derivation
+step to thread a `CSVResult` through monad chaining - please refer to the code for details.
+
+## Traverse
+
+There's one last pitfall... In our top level `#parse()`, we used to `#map()` over the `Row` (yes, `List` has
+`Functor`/`Applicative`/`Monad` instances, as well). Doing this with the new API gives us a
+`List[CSVResult[T]]`. But we just want to fail the whole computation if any row cannot be parsed -
+that is, we want a `CSVResult[List[T]]` instead.
+
+Another abstraction to the rescue! `List` has a [`Traverse`](https://typelevel.org/cats/typeclasses/traverse.html)
+instance, which gives us functions for upending this kind of nesting, which work with any `Applicative`.
+
+```scala
+def parse[T](file: Path)(p: RowParser[T]): CSVResult[List[T]] =
+  lines(file).map(row).traverse(parseRow(p))
+```
+
+## Resolution
+
+Finally, we need to resolve the two `Either` modes at the top level of our program, e.g. via
+pattern matching.
+
+```scala
+CSVParser.parse(Paths.get(csvFile))(userParser) match
+  case Left(f) => println(s"ERROR: $f")
+  case Right(r) => r.foreach(println)
+```
+
+Whew. This was quite a ride, and the benefit/cost ratio of this approach to failure handling may seem
+somewhat questionable. In its defense...
+
+- We now have a very explicit representation of failure modes - actually they have become part of
+  the normal program flow now, which seems quite right. After all, you need to treat them with the same
+  diligence as the "happy path" - keeping them kind of invisible seems somewhat absurd.
+- The prospect of mentally juggling all these new abstractions may feel daunting, but the good news is:
+  There's only so many of them (you can go a long way with `Functor`, `Applicative`, `Monad[Error]`,
+  `Traversable` and [`Foldable`]()), and they're almost universally applicable.
+
+I hope the benefit will become even clearer in subsequent posts. The full code for this post can be found in package
+[`de.sangamon.nanocsv.step04`](https://github.com/sangamon/nanocsv/tree/main/src/main/scala/de/sangamon/nanocsv/step04).
+In the next step, we will extend failure handling to the file level.
