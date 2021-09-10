@@ -1,0 +1,107 @@
+---
+layout: post
+title:  "step 06: Positions"
+date:   2021-09-09 19:00:00 +0200
+---
+
+## Error Location
+
+In the [last step]({{ site.baseurl }}{% post_url 2021-09-09-step05 %}), we integrated some file level
+errors to our user error representation. Let's go back to the core parser errors.
+
+As things stand now, we signal parse errors to the user, but we don't give any indication as to
+_where_ in the CSV file the error occurred. It would be really helpful if we could amend parser
+errors with the row and column index of the occurrence.
+
+```scala
+case class ParserPos(rowIdx: Int, colIdx: Int)
+
+enum CSVParseFailure:
+  case ColumnParseFailure(cause: Throwable, pos: ParserPos)
+  case RowExhaustionFailure(pos: ParserPos)
+```
+
+Figuring out the row index is no problem - we can just `#zipWithIndex` the rows. However, we'd
+either have to pass the current index from the top level "loop" down to the individual column
+parsers, or we'd have to intercept user errors on their way up and somehow inject the row index
+at the top level. Both approaches would significantly pollute our API.
+
+Column indices are even trickier. We don't know how many columns have been consumed excactly
+at which point, so it has to be the job of the column parsers to keep track of this.
+
+## Stating Positions
+
+We're already threading information through the parsers: The remaining row, as 
+the parsers consume it. We can just amend the position information.
+
+```scala
+case class ParserState(pos: ParserPos, prevColIdx: Int, remainder: Row)
+
+trait RowParser[T]:
+  def parse(st: ParserState): CSVResult[(T, ParserState)]
+```
+
+Why `prevColIdx`? Well, remember `#emap()` and `#guardMap()` - these can fail and would want to specify their
+position. But the current `pos` has already been advanced to the next column to be consumed by the parser that
+produced the input to our mapping function., whereas in these cases we want to report the most recent column consumed
+by this parser. And we cannot just assume that the difference is one column - it may be more or less (think constant
+parsers).
+
+The only parser we have (so far) that consumes anything and needs to advance the state is `string`. Upon success, it
+must advance all state values, otherwise it should encode its position in the error response.
+
+```scala
+val string: RowParser[String] =
+  case ParserState(ParserPos(r, c), _, h :: t) => 
+    (h, ParserState(ParserPos(r, c + 1), c, t)).pure
+  case ParserState(p, _, Nil) => 
+    RowExhaustionFailure(p).asLeft[(String, ParserState)]
+```
+
+## Place Failure
+
+Now we have to update our failure sites. In `end` we want to state the current (advanced) position, 
+
+```scala
+  val end: RowParser[Unit] = {
+    case s@ParserState(_, _, Nil) => ((), s).asRight
+    case ParserState(pos, _, _ :: _) =>
+      ColumnParseFailure(new IllegalStateException("trailing data"), pos).asLeft
+  }
+```
+
+On `#guardMap()`, however, we want to trace back to the last consumed column.
+
+```scala
+def guardMap[B](f: A => B): RowParser[B] =
+  p.parse(_) >>= {
+    case (res, st@ParserState(ParserPos(r, c), pc, _)) =>
+      Either.catchNonFatal(f(res))
+        .leftMap(ColumnParseFailure(_, ParserPos(r, pc)))
+        .map(_ -> st)
+    }
+```
+
+Now the position just needs to be initialized:
+
+```scala
+private def parseRow[T](p: RowParser[T])(row: Row, rowIdx: Int): CSVResult[T] =
+  p.parse(ParserState(ParserPos(rowIdx, 0), 0, row)).map(_(0))
+
+def parseLines[T](p: RowParser[T])(lines: List[String]): CSVResult[List[T]] =
+  lines.map(row).zipWithIndex.traverse(parseRow(p))
+```
+
+...and we get proper location reports for parse failure, exhaustion and trailing data...
+
+```
+ERROR: ColumnParseFailure(java.time.format.DateTimeParseException: 
+  Text '2000-02-20x' could not be parsed, unparsed text found at index 10,ParserPos(1,2))
+ERROR: RowExhaustionFailure(ParserPos(1,2))
+ERROR: ColumnParseFailure(java.lang.IllegalStateException: trailing data,ParserPos(1,3))
+```
+
+The full code for this post can be found in package
+[`de.sangamon.nanocsv.step06`](https://github.com/sangamon/nanocsv/tree/main/src/main/scala/de/sangamon/nanocsv/step06).
+In the next step we will see how this kind of state propagation blends in with the reusable abstractions we've
+been working with already.

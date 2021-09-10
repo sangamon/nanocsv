@@ -74,4 +74,7 @@ sbt:nanocsv> runMain de.sangamon.nanocsv.step05.main data/users.csv
 ERROR: ColumnParseFailure(java.lang.IllegalStateException: trailing data)
 ```
 
-In the next post, we'll discuss making our user errors more informative.
+The full code for this post can be found in package
+[`de.sangamon.nanocsv.step05`](https://github.com/sangamon/nanocsv/tree/main/src/main/scala/de/sangamon/nanocsv/step05).
+In the [next post]({{ site.baseurl }}{% post_url 2021-09-09-step06 %}), we'll discuss making our user errors
+more informative.
