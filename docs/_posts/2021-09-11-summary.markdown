@@ -1,0 +1,64 @@
+---
+layout: post
+title:  "Summary"
+date:   2021-09-11 18:00:00 +0200
+---
+
+## Retrospective
+
+In the [last]({{ site.baseurl }}{% post_url 2021-09-11-step08 %}) (and tentatively final) step of this series we
+have introduced cats-effect and the `IO` abstraction.
+
+## Achievements
+
+What have we achieved so far?
+
+### Features
+
+- creation of new row parsers from the basic string parser
+- applicative row parser combinator API
+- type class based automatic row parser derivation from case classes/constructor functions
+- domain-specific exceptions
+- row/col position reporting on parse failure
+
+For still < 120 LoC, that doesn't sound too bad.
+
+### Techniques
+
+- perusing `Functor` for parser derivation
+- using `Applicative` for parser combination
+- using type classes for automatic parser derivation
+- using `Either` for explicit failure mode threading
+- in general, using `Functor`/`Applicative`/`Monad` for chaining computations
+- using `State`/`StateT` for threading mutable state
+- using `IO` for side effecting code
+
+## Loose Ends
+
+There's still lots of things that could be done, of course.
+
+### Features
+
+- support more CSV features
+  - headers
+  - quoting/escaping
+  - multiline columns
+  - ...
+- streaming (via [fs2](https://fs2.io/)?)
+- other sources than files
+- ...
+
+### Techniques
+
+- introduce more abstractions
+  - `Semigroup`/`Monoid`
+  - `ApplicativeError`/`MonadError`
+  - `Foldable`
+  - `Traverse`
+  - ...
+- implement `Monad[Error]` for `RowParser`
+- ...
+
+## Further Reading
+
+- [Scala with Cats](https://www.scalawithcats.com/)

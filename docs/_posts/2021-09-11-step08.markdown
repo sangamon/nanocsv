@@ -123,4 +123,5 @@ working the ideas and experimenting with the implementation.
 
 The full code for this post can be found in package
 [`de.sangamon.nanocsv.step08`](https://github.com/sangamon/nanocsv/tree/main/src/main/scala/de/sangamon/nanocsv/step08).
-In the next post we will take a summary look at what we have achieved so far.
+In the [next post]({{ site.baseurl }}{% post_url 2021-09-11-summary %}) we will take a summary look at what we have
+achieved so far.
