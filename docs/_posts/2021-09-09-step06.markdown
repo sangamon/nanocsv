@@ -82,6 +82,8 @@ def guardMap[B](f: A => B): RowParser[B] =
     }
 ```
 
+> Note that we cannot reuse `#emap()` for now.
+
 Now the position just needs to be initialized:
 
 ```scala
@@ -112,7 +114,7 @@ sbt:nanocsv> runMain de.sangamon.nanocsv.step06.main data/users.csv
 ERROR: RowExhaustionFailure(ParserPos(1,2))
 ```
 
-and trailing data.
+...and trailing data.
 
 ```
 sbt:nanocsv> runMain de.sangamon.nanocsv.step06.main data/users.csv
@@ -124,5 +126,5 @@ ERROR: ColumnParseFailure(java.lang.IllegalStateException:
 
 The full code for this post can be found in package
 [`de.sangamon.nanocsv.step06`](https://github.com/sangamon/nanocsv/tree/main/src/main/scala/de/sangamon/nanocsv/step06).
-In the next step we will see how this kind of state propagation blends in with the reusable abstractions we've
-been working with already.
+In the [next step]({{ site.baseurl }}{% post_url 2021-09-11-step07 %}) we will see how this kind of state propagation
+blends in with the reusable abstractions we've been working with already.

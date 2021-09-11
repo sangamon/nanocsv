@@ -1,4 +1,4 @@
-package de.sangamon.nanocsv.step06
+package de.sangamon.nanocsv.step07
 
 import cats.*
 import cats.data.*
@@ -22,43 +22,51 @@ type CSVResult[T] = Either[CSVParseFailure, T]
 
 case class ParserState(pos: ParserPos, prevColIdx: Int, remainder: Row)
 
+type CSVParseEff[T] = StateT[CSVResult, ParserState, T]
+
 trait RowParser[T]:
-  def parse(st: ParserState): CSVResult[(T, ParserState)]
+  def parse(): CSVParseEff[T]
 
 object RowParser:
 
   import CSVParseFailure.*
 
   given Applicative[RowParser] with
-    def pure[A](x: A): RowParser[A] = (x, _).pure
+    def pure[A](a: A): RowParser[A] = () => a.pure
     def ap[A, B](ff: RowParser[A => B])(fa: RowParser[A]): RowParser[B] =
-      row =>
+      () =>
         for {
-          (f, fr) <- ff.parse(row)
-          (a, ar) <- fa.parse(fr)
-        } yield f(a) -> ar
+          f <- ff.parse()
+          a <- fa.parse()
+        } yield f(a)
 
   extension[A](p: RowParser[A])
-    def emap[B](f: A => CSVResult[B]): RowParser[B] =
-      p.parse(_) >>= { case (res, st) => f(res).map(_ -> st) }
+    def emap[B](f: A => CSVParseEff[B]): RowParser[B] =
+      () => p.parse() >>= f
     def guardMap[B](f: A => B): RowParser[B] =
-      p.parse(_) >>= {
-        case (res, st@ParserState(ParserPos(r, c), pc, _)) =>
-          Either.catchNonFatal(f(res)).leftMap(ColumnParseFailure(_, ParserPos(r, pc))).map(_ -> st)
+      emap {
+        a => StateT.inspectF { s =>
+          Either.catchNonFatal(f(a)).leftMap(ColumnParseFailure(_, ParserPos(s.pos.rowIdx, s.prevColIdx)))
         }
+      }
 
   val string: RowParser[String] =
-    case ParserState(ParserPos(r, c), _, h :: t) => (h, ParserState(ParserPos(r, c + 1), c, t)).pure
-    case ParserState(p, _, Nil) => RowExhaustionFailure(p).asLeft[(String, ParserState)]
+    () =>
+      StateT {
+        case ParserState(ParserPos(r, c), _, h :: t) => (ParserState(ParserPos(r, c + 1), c, t), h).pure
+        case ParserState(p, _, Nil) => RowExhaustionFailure(p).asLeft
+      }
 
   val int: RowParser[Int] = string.guardMap(_.toInt)
   val date: RowParser[LocalDate] = string.guardMap(LocalDate.parse)
 
-  val end: RowParser[Unit] = {
-    case s@ParserState(_, _, Nil) => ((), s).asRight
-    case ParserState(pos, _, _ :: _) =>
-      ColumnParseFailure(new IllegalStateException("trailing data"), pos).asLeft
-  }
+  val end: RowParser[Unit] =
+    () =>
+      StateT.inspectF {
+        case s@ParserState(_, _, Nil) => ().pure
+        case ParserState(pos, _, _ :: _) =>
+          ColumnParseFailure(new IllegalStateException("trailing data"), pos).asLeft
+      }
 
   given RowParser[String] = string
   given RowParser[Int] = int
@@ -74,11 +82,11 @@ object RowParserDerivable:
 
   given[A, B, C](using RowParser[A], RowParserDerivable[B, C]): RowParserDerivable[A => B, C] with
     def deriveRowParser(f: A => B): RowParser[C] =
-      st =>
+      () =>
         for {
-          (a, remA) <- summon[RowParser[A]].parse(st)
-          res <- summon[RowParserDerivable[B, C]].deriveRowParser(f(a)).parse(remA)
-        } yield res
+          a <- summon[RowParser[A]].parse()
+          c <- summon[RowParserDerivable[B, C]].deriveRowParser(f(a)).parse()
+        } yield c
 
   extension[A](a: A)
     def deriveRowParser[B](using derive: RowParserDerivable[A, B]): RowParser[B] = derive.deriveRowParser(a)
@@ -101,7 +109,7 @@ object CSVParser:
   private def row(line: String): Row = line.split(',').toList
 
   private def parseRow[T](p: RowParser[T])(row: Row, rowIdx: Int): CSVResult[T] =
-    p.parse(ParserState(ParserPos(rowIdx, 0), 0, row)).map(_(0))
+    p.parse().runA(ParserState(ParserPos(rowIdx, 0), 0, row))
 
   def parseLines[T](p: RowParser[T])(lines: List[String]): CSVResult[List[T]] =
     lines.map(row).zipWithIndex.traverse(parseRow(p))
