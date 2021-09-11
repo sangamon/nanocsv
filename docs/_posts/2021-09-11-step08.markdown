@@ -1,0 +1,126 @@
+---
+layout: post
+title:  "Step 08: I/O"
+date:   2021-09-11 15:00:00 +0200
+---
+
+## Effects
+
+In the [previous step]({{ site.baseurl }}{% post_url 2021-09-11-step07 %}) we
+have introduced the state abstraction and used a monad transformer to provide our internal API with a unified,
+monadic handling of "mutable" state and failure modes as a single effect. We have
+seen that this amounts to considering an effectful computation as an execution plan or "program"
+that can explicitly be invoked.
+
+So far we have not changed much about our file I/O handling, other than lifting specific
+I/O exceptions to our CSV failure level. We just execute this code and let exceptions bubble up.
+But side-effecting I/O seems to be a typical (if not _the_) case of an effect - can we wrap
+this into an effectful abstraction, as well?
+
+## cats-effect
+
+This is exactly what [cats-effect](https://typelevel.org/cats-effect/) provides. Built on top of the
+abstractions encoded in the Cats library, it comes with a hierarchy of further high-level abstractions
+for side-effecting computations, and one main data type supported by these abstractions, unsurprisingly
+named [`IO`](https://typelevel.org/cats-effect/api/3.x/cats/effect/IO.html).
+
+Just like we explicitly thread failures through with `Either`, `IO` has an implicit failure mode
+for `Throwable`. An `IO` computation can be successful and yield a value, or it can fail and yield a
+`Throwable`. This doesn't seem too different from vanilla exception handling in the JVM - however,
+it still makes a distinction between pure computations that must never throw (no `IO`) and
+side-effecting computations that may fail in a controlled way (with `IO`).
+
+## Running in IO
+
+The only place where we are actually handling side-effecting I/O is when reading lines from the file.
+Let's convert the `#lines()` method to run in `IO`.
+
+```scala
+private def lines(file: Path): IO[Either[CSVIOFailure, List[String]]] =
+  Resource
+    .fromAutoCloseable { IO.blocking { Source.fromFile(file.toFile) } }
+    .use { src => IO.blocking { src.getLines().toList.asRight } }
+    .recover {
+      case fnfExc: FileNotFoundException =>
+        CSVIOFailure(file.toAbsolutePath, fnfExc).asLeft
+    }
+```
+
+- [`Resource`](https://typelevel.org/cats-effect/docs/std/resource) represents the equivalent to `Using` in `IO`:
+  Given a closeable resource, it wraps an effectful computation and ensures that the resource will be cleanly
+  closed afterwards, independently of whether the computation succeeded or failed.  
+- `IO` strives to make very efficient use of JVM threads through pooling and reusing threads. This assumes that
+  there a no long-running operations that block a single thread. In cases where this is unavoidable (e.g. when
+  calling external I/O functionality), the corresponding computation should be wrapped in `IO#blocking()`
+  to let the system know that a different scheduling approach is in order for this task.
+- `IO#recover()` corresponds to our previous `#catchOnly()`/`#leftMap()` construct. It lifts a potential failure
+  from the `IO` context and converts it to a success value (as seen from the `IO` level - conceptually it's still a
+  failure for us, represented by an `Either` left).
+
+Now we want to continue processing the result of this `IO` computation. Since `#parseLines()` is a pure
+function, we can use the `Functor` instance for `IO`.
+
+```scala
+def parse[T](file: Path)(p: RowParser[T]): IO[Either[CSVFailure, List[T]]] =
+  lines(file).map(_.leftWiden[CSVFailure] >>= parseLines(p))
+```
+
+Note the nesting: At the outer level, we `#map()` over `IO`, at the inner level we `#flatMap()` over
+the `Either` that is the success result type of the `IO` computation.
+
+## Bootstrapping IO
+
+Now we still need to run the `IO` computation from our main class. Well, _we_ can't. Remember, just like
+`State`, `IO` is a computation plan that explicitly is executed with some input. What's the input for `IO`?
+It's the state of the world, including your file system, your hard drive and yourself. This is not how it's implemented,
+of course, but conceptually that's what it is: An `IO[T]` is a `State[World, T]`. We have to rely on the framework
+to bootstrap our computation by having our main class extend `IOApp`.
+
+```scala
+object CSVParseMain extends IOApp:
+
+  // ...
+
+  override def run(args: List[String]): IO[ExitCode] =
+    args match
+      case List(csvFile) =>
+        CSVParser.parse(Paths.get(csvFile))(userParser).flatMap {
+          _.fold(
+            e => IO.blocking { println(s"ERROR: $e") } >> ExitCode.Error.pure,
+            r => IO.blocking { r.foreach(println) } >> ExitCode.Success.pure
+          )
+        }
+      case _ =>
+        IO.blocking { println("Usage: minicsv <csv file path>") } >> 
+          ExitCode.Error.pure
+```
+
+Think of `IOApp` as setting up an `IO` context and then kind of running a `#flatMap()` over `#run()`.
+Note that we have three possible outcomes here: a successful computation with either `Success` or
+`Error` as the result, or a failed computation encapsulating a `Throwable` that will be dumped upon
+program exit, just as if letting an exception bubble up.
+
+Let's run a smoke test for success...
+
+```
+sbt:nanocsv> runMain de.sangamon.nanocsv.step08.CSVParseMain data/users.csv
+User(1,Torsten Test,1970-01-01)
+User(2,Andrea Anders,2000-02-20)
+```
+
+...and some failure.
+
+```
+sbt:nanocsv> runMain de.sangamon.nanocsv.step08.CSVParseMain data/xyz.csv
+ERROR: CSVIOFailure(/work/git/scala/sangamon/nanocsv/data/xyz.csv,
+  java.io.FileNotFoundException: data/xyz.csv (No such file or directory))
+```
+
+This was only a sneak peek into cats-effect, of course, and just as with `Either` based failure modes,
+the benefit may not be fully obvious at first glance. I can only assure you that I've been there, too,
+and that the advantage of structuring a code base this way slowly but steadily unfolded as I kept
+working the ideas and experimenting with the implementation.
+
+The full code for this post can be found in package
+[`de.sangamon.nanocsv.step08`](https://github.com/sangamon/nanocsv/tree/main/src/main/scala/de/sangamon/nanocsv/step08).
+In the next post we will take a summary look at what we have achieved so far.

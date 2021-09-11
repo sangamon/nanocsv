@@ -7,5 +7,6 @@ ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation", "-Xfatal-warning
 lazy val root = (project in file("."))
   .settings(
     name := "nanocsv",
-    libraryDependencies += "org.typelevel" %% "cats-core" % "2.6.1"
+    libraryDependencies += "org.typelevel" %% "cats-core" % "2.6.1",
+    libraryDependencies += "org.typelevel" %% "cats-effect" % "3.2.2"
   )

@@ -39,8 +39,8 @@ def flatMap[S, A, B](sa: FState[S, A])(f: A => FState[S, B]): FState[S, B] =
     f(a)(s1)
 ```
 
-Cats already provides a `State` [data type](https://typelevel.org/cats/datatypes/state.html) with the
-corresponding type class bindings.
+As noted in [step 02]({{ site.baseurl }}{% post_url 2021-09-09-step06 %}), Cats already provides a
+`State` [data type](https://typelevel.org/cats/datatypes/state.html) with the  corresponding type class bindings.
 
 So we can thread a `State` through a computation chain just like we do with `Either` right now. This
 sounds promising, but there's a problem...
@@ -207,4 +207,5 @@ ERROR: CSVIOFailure(data/xyz.csv,java.io.FileNotFoundException:
 
 The full code for this post can be found in package
 [`de.sangamon.nanocsv.step07`](https://github.com/sangamon/nanocsv/tree/main/src/main/scala/de/sangamon/nanocsv/step07).
-In the next post we will review what we have accomplished so far.
+In the [next post]({{ site.baseurl }}{% post_url 2021-09-11-step08 %}) we will finally integrate our I/O handling
+with the Cats ecosystem.
