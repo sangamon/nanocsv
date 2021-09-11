@@ -97,6 +97,16 @@ And that's it already.
 val userParser: RowParser[User] = User.apply.curried.deriveRowParser
 ```
 
+Let's try it out:
+
+```
+sbt:nanocsv> runMain de.sangamon.nanocsv.step03.main data/users.csv
+1,Torsten Test,1970-01-01
+2,Andrea Anders,2000-02-20
+User(1,Torsten Test,1970-01-01)
+User(2,Andrea Anders,2000-02-20)
+```
+
 The full code for this post can be found in package [`de.sangamon.nanocsv.step03`](https://github.com/sangamon/nanocsv/tree/main/src/main/scala/de/sangamon/nanocsv/step03). This completes our quest
 for a decent row parser combinator API for now. In the [next step]({{ site.baseurl }}{% post_url 2021-09-09-step04 %}),
 we will turn from these lofty heights to the clerical chores of error handling.

@@ -128,6 +128,16 @@ val userParser: RowParser[User] =
   const(User.apply.curried) <*> int <*> string <*> date
 ```
 
+Our example still works:
+
+```
+sbt:nanocsv> runMain de.sangamon.nanocsv.step01.main data/users.csv
+1,Torsten Test,1970-01-01
+2,Andrea Anders,2000-02-20
+User(1,Torsten Test,1970-01-01)
+User(2,Andrea Anders,2000-02-20)
+```
+
 Now this is starting to look like a decent combinator API.
 
 The full code for this post can be found in package [`de.sangamon.nanocsv.step01`](https://github.com/sangamon/nanocsv/tree/main/src/main/scala/de/sangamon/nanocsv/step01). [Next]({{ site.baseurl }}{% post_url 2021-09-08-step02 %}), let's see if there's prior art for this idea that we can integrate with.

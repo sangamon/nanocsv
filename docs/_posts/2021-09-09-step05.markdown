@@ -43,7 +43,8 @@ def parse[T](file: Path)(p: RowParser[T]): Either[CSVFailure, List[T]] =
 
 ```
 sbt:nanocsv> runMain de.sangamon.nanocsv.step05.main data/xyz.csv
-ERROR: CSVIOFailure(data/xyz.csv,java.io.FileNotFoundException: data/xyz.csv (No such file or directory))
+ERROR: CSVIOFailure(data/xyz.csv,java.io.FileNotFoundException:
+  data/xyz.csv (No such file or directory))
 ```
 
 ## Encore: End
@@ -71,6 +72,8 @@ Possible outcome:
 
 ```
 sbt:nanocsv> runMain de.sangamon.nanocsv.step05.main data/users.csv
+1,Torsten Test,1970-01-01
+2,Andrea Anders,2000-02-20,x
 ERROR: ColumnParseFailure(java.lang.IllegalStateException: trailing data)
 ```
 

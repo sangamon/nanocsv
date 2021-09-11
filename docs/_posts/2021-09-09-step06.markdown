@@ -92,13 +92,34 @@ def parseLines[T](p: RowParser[T])(lines: List[String]): CSVResult[List[T]] =
   lines.map(row).zipWithIndex.traverse(parseRow(p))
 ```
 
-...and we get proper location reports for parse failure, exhaustion and trailing data...
+...and we get proper location reports for parse failure,...
 
 ```
+sbt:nanocsv> runMain de.sangamon.nanocsv.step06.main data/users.csv
+1,Torsten Test,1970-01-01
+2,Andrea Anders,2000-02-20x
 ERROR: ColumnParseFailure(java.time.format.DateTimeParseException: 
-  Text '2000-02-20x' could not be parsed, unparsed text found at index 10,ParserPos(1,2))
+  Text '2000-02-20x' could not be parsed, unparsed text found at index 10,
+  ParserPos(1,2))
+```
+
+...exhaustion...
+
+```
+sbt:nanocsv> runMain de.sangamon.nanocsv.step06.main data/users.csv
+1,Torsten Test,1970-01-01
+2,Andrea Anders
 ERROR: RowExhaustionFailure(ParserPos(1,2))
-ERROR: ColumnParseFailure(java.lang.IllegalStateException: trailing data,ParserPos(1,3))
+```
+
+and trailing data.
+
+```
+sbt:nanocsv> runMain de.sangamon.nanocsv.step06.main data/users.csv
+1,Torsten Test,1970-01-01
+2,Andrea Anders,2000-02-20,x
+ERROR: ColumnParseFailure(java.lang.IllegalStateException: 
+  trailing data,ParserPos(1,3))
 ```
 
 The full code for this post can be found in package

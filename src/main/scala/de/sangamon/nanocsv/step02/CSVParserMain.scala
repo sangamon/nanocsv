@@ -4,6 +4,8 @@ import cats.syntax.all.*
 import de.sangamon.nanocsv.shared.*
 
 import java.nio.file.*
+import scala.io.*
+import scala.util.*
 
 object CSVParserMain:
 
@@ -13,5 +15,5 @@ object CSVParserMain:
   val userParser: RowParser[User] = (int, string, date).mapN(User.apply)
 
   @main def main(csvFile: String): Unit =
-    for(u <- CSVParser.parse(Paths.get(csvFile))(userParser))
-      println(u)
+    Using(Source.fromFile(csvFile)) { _.getLines().foreach(println) }
+    CSVParser.parse(Paths.get(csvFile))(userParser).foreach(println)

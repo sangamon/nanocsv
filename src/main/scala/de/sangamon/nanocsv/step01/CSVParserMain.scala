@@ -3,6 +3,8 @@ package de.sangamon.nanocsv.step01
 import de.sangamon.nanocsv.shared.*
 
 import java.nio.file.*
+import scala.io.*
+import scala.util.*
 
 object CSVParseMain:
 
@@ -13,5 +15,5 @@ object CSVParseMain:
     const(User.apply.curried) <*> int <*> string <*> date
 
   @main def main(csvFile: String): Unit =
-    for(u <- CSVParser.parse(Paths.get(csvFile))(userParser))
-      println(u)
+    Using(Source.fromFile(csvFile)) { _.getLines().foreach(println) }
+    CSVParser.parse(Paths.get(csvFile))(userParser).foreach(println)

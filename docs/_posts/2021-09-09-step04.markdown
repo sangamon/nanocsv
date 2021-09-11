@@ -148,7 +148,8 @@ Success,...
 
 ```
 sbt:nanocsv> runMain de.sangamon.nanocsv.step04.main data/users.csv
-[info] running de.sangamon.nanocsv.step04.main data/users.csv
+1,Torsten Test,1970-01-01
+2,Andrea Anders,2000-02-20
 User(1,Torsten Test,1970-01-01)
 User(2,Andrea Anders,2000-02-20)
 ```
@@ -157,15 +158,18 @@ User(2,Andrea Anders,2000-02-20)
 
 ```
 sbt:nanocsv> runMain de.sangamon.nanocsv.step04.main data/users.csv
-ERROR: ColumnParseFailure(java.time.format.DateTimeParseException: Text '2000-02-20x' could not be parsed, unparsed text found at index 10)
+1,Torsten Test,1970-01-01
+2,Andrea Anders,2000-02-20x
+ERROR: ColumnParseFailure(java.time.format.DateTimeParseException:
+  Text '2000-02-20x' could not be parsed, unparsed text found at index 10)
 ```
 
 ...and I/O failure.
 
 ```
 sbt:nanocsv> runMain de.sangamon.nanocsv.step04.main data/xyz.csv
-[info] running de.sangamon.nanocsv.step04.main data/xyz.csv
-[error] (run-main-d) java.io.FileNotFoundException: data/xyz.csv (No such file or directory)
+[error] (run-main-1) java.io.FileNotFoundException:
+  data/xyz.csv (No such file or directory)
 ```
 
 Whew. This was quite a ride, and the benefit/cost ratio of this approach to failure handling may seem

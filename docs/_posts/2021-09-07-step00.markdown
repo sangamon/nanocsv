@@ -58,15 +58,18 @@ For convenience, we provide some primitive conversion functions `#string()`, `#i
 Usage looks like this:
 
 ```scala
-val parseUser: Row => User =
+val userParser: Row => User =
   case List(i, n, b) => User(int(i), string(n), date(b))
-  case _ => 
+  case _ =>
     throw new IllegalArgumentException("wrong number of columns for user")
 
 @main def main(csvFile: String): Unit =
-  for(u <- CSVParser.parse(Paths.get(csvFile))(parseUser))
-    println(u)
+  Using(Source.fromFile(csvFile)) { _.getLines().foreach(println) }
+  CSVParser.parse(Paths.get(csvFile))(userParser).foreach(println)
 ```
+
+> Note: We are deliberately ignoring errors during the raw file dump for
+> presentation purposes. Don't ever do this in production code!
 
 ## Shortcomings
 
@@ -74,6 +77,8 @@ While this kind of works...
 
 ```
 sbt:nanocsv> runMain de.sangamon.nanocsv.step00.main data/users.csv
+1,Torsten Test,1970-01-01
+2,Andrea Anders,2000-02-20
 User(1,Torsten Test,1970-01-01)
 User(2,Andrea Anders,2000-02-20)
 ```

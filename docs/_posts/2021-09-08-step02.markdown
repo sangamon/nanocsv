@@ -64,6 +64,16 @@ val userParser: RowParser[User] =
   (int, string, date).mapN(User.apply)
 ```
 
+Sanity check:
+
+```
+sbt:nanocsv> runMain de.sangamon.nanocsv.step02.main data/users.csv
+1,Torsten Test,1970-01-01
+2,Andrea Anders,2000-02-20
+User(1,Torsten Test,1970-01-01)
+User(2,Andrea Anders,2000-02-20)
+```
+
 There are more convenience functions built on `Applicative`, for example the operators `*>` and `<*` that ignore the result of the left or right hand side. (We'll probably see example applications of this in a later post.) There are also ties between `Applicative` and other abstractions that provide an even richer API.
 
 The full code for this post can be found in package [`de.sangamon.nanocsv.step02`](https://github.com/sangamon/nanocsv/tree/main/src/main/scala/de/sangamon/nanocsv/step02). Now that we've become proper citizens of Cats, let's take [one further step]({{ site.baseurl }}{% post_url 2021-09-08-step03 %}) to ease parser assembly for our users.
